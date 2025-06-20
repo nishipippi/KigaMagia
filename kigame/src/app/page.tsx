@@ -6,9 +6,12 @@ import Spell from '../components/Spell';
 import Enemy from '../components/Enemy';
 import ExperienceOrb from '../components/ExperienceOrb';
 import TitleScreen from '../components/TitleScreen'; // TitleScreenをインポート
+import { spells as allSpells } from '../data/spells'; // spellsデータをインポート
 import HUD from '../components/HUD'; // HUDをインポート
 import LevelUpScreen from '../components/LevelUpScreen'; // LevelUpScreenをインポート
 import ResultScreen from '../components/ResultScreen'; // ResultScreenをインポート
+import { Choice } from '../components/LevelUpScreen'; // Choiceインターフェースをインポート
+import ChainLightningEffect from '../components/ChainLightningEffect'; // ChainLightningEffectをインポート
 
 interface SpellData {
   id: number;
@@ -16,6 +19,7 @@ interface SpellData {
   y: number;
   dx: number; // 魔法のX方向移動量
   dy: number; // 魔法のY方向移動量
+  spellId: string; // 魔法のIDを追加
 }
 
 interface EnemyData {
@@ -53,12 +57,20 @@ export default function Home() {
   const [playerMaxHp, setPlayerMaxHp] = useState(100); // プレイヤーの最大HP (仮)
   const [playerMana, setPlayerMana] = useState(50); // プレイヤーのマナ (仮)
   const [playerMaxMana, setPlayerMaxMana] = useState(50); // プレイヤーの最大マナ (仮)
+  const [acquiredSpells, setAcquiredSpells] = useState<string[]>(['magic_fist']); // 習得済みの魔法
+  const [levelUpChoices, setLevelUpChoices] = useState<Choice[]>([]); // レベルアップ時の選択肢を保持
+  const [spellCooldowns, setSpellCooldowns] = useState<Record<string, number>>({}); // 魔法ごとのクールダウン管理
+  const [chainLightningEffects, setChainLightningEffects] = useState<
+    { id: number; fromX: number; fromY: number; toX: number; toY: number; startTime: number }[]
+  >([]); // チェインライトニングのアニメーション効果
+  const chainLightningEffectIdCounterRef = useRef(0); // チェインライトニングエフェクトのIDカウンター
   const [gamePhase, setGamePhase] = useState<GamePhase>('title'); // 初期状態を'title'に変更
   const [survivalTime, setSurvivalTime] = useState(0); // 生存時間
   const timerRef = useRef<NodeJS.Timeout | null>(null); // タイマー参照
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 }); // キャンバスサイズ
 
   const EXP_TO_LEVEL_UP = 10;
+  const MANA_REGEN_PER_SECOND = 20; // マナ回復量/秒
   // const GAME_CANVAS_HEIGHT = 600; // ゲームキャンバスの高さ (不要になるためコメントアウト)
 
   const handleStartGame = () => {
@@ -75,6 +87,8 @@ export default function Home() {
     setPlayerMaxHp(100); // リセット時に最大HPも設定
     setPlayerMana(50); // リセット時にマナも設定
     setPlayerMaxMana(50); // リセット時に最大マナも設定
+    setAcquiredSpells(['magic_fist']); // 習得済み魔法を初期化
+    setSpellCooldowns({}); // クールダウンを初期化
     setSurvivalTime(0); // 生存時間をリセット
     if (timerRef.current) clearInterval(timerRef.current); // 既存タイマーをクリア
     timerRef.current = setInterval(() => {
@@ -126,28 +140,54 @@ export default function Home() {
     playerDirectionRef.current = playerDirection;
   }, [playerDirection]);
 
-  // 魔法の自動発射ロジック
+  // 魔法の自動発射ロジックとマナ回復
   useEffect(() => {
     if (gamePhase !== 'playing') return;
 
-    const spellInterval = setInterval(() => {
+    const gameTickInterval = setInterval(() => {
+      const now = Date.now();
       const spellSpeed = 10; // 魔法の速度
       const direction = playerDirectionRef.current; // refから最新の向きを取得
 
-      setSpells((prevSpells) => [
-        ...prevSpells,
-        {
-          id: spellIdCounterRef.current++,
-          x: playerXRef.current,
-          y: playerYRef.current,
-          dx: direction.dx * spellSpeed,
-          dy: direction.dy * spellSpeed,
-        },
-      ]);
-    }, 500);
+      // マナ回復
+      setPlayerMana((prevMana) => Math.min(prevMana + (MANA_REGEN_PER_SECOND / 10), playerMaxMana));
 
-    return () => clearInterval(spellInterval);
-  }, [gamePhase]); // 依存配列から playerDirection を削除
+      // 各習得魔法の発動チェック
+      acquiredSpells.forEach((spellId) => {
+        const spell = allSpells.find(s => s.id === spellId);
+        if (!spell) return;
+
+        const lastCastTime = spellCooldowns[spell.id] || 0;
+        const cooldownTimeMs = spell.cooldown * 1000;
+
+        if (now - lastCastTime >= cooldownTimeMs && playerMana >= spell.manaCost) {
+          // 魔法発射
+          setSpells((prevSpells) => [
+            ...prevSpells,
+            {
+              id: spellIdCounterRef.current++,
+              x: playerXRef.current,
+              y: playerYRef.current,
+              dx: direction.dx * spellSpeed,
+              dy: direction.dy * spellSpeed,
+              spellId: spell.id,
+            },
+          ]);
+
+          // マナ消費
+          setPlayerMana((prevMana) => prevMana - spell.manaCost);
+
+          // クールダウン更新
+          setSpellCooldowns((prevCooldowns) => ({
+            ...prevCooldowns,
+            [spell.id]: now,
+          }));
+        }
+      });
+    }, 100); // 100msごとにチェック
+
+    return () => clearInterval(gameTickInterval);
+  }, [gamePhase, acquiredSpells, playerMana, playerMaxMana, spellCooldowns]); // 依存配列に spellCooldowns と playerMana, playerMaxMana を追加
 
   // 敵の自動出現ロジック
   useEffect(() => {
@@ -188,7 +228,7 @@ export default function Home() {
     }, 2000);
 
     return () => clearInterval(enemyInterval);
-  }, [gamePhase]); // 依存配列からenemyIdCounterを削除
+  }, [canvasSize.height, canvasSize.width, gamePhase]); // 依存配列からenemyIdCounterを削除
 
   // ゲームループ（移動、衝突判定、状態更新）
   useEffect(() => {
@@ -202,6 +242,7 @@ export default function Home() {
       let nextPlayerHp = playerHp;
       let nextCurrentExp = currentExp;
       let gamePhaseChanged = false;
+      let newChainLightningEffects: typeof chainLightningEffects = [];
 
       // 1. 位置更新
       nextSpells = nextSpells
@@ -248,9 +289,59 @@ export default function Home() {
           if (enemiesHitBySpells.has(enemy.id)) return;
           const distance = Math.sqrt(Math.pow(spell.x - enemy.x, 2) + Math.pow(spell.y - enemy.y, 2));
           if (distance < 20) {
+            // 魔法が敵に命中
             spellHit = true;
             enemiesHitBySpells.add(enemy.id);
             newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: enemy.x, y: enemy.y });
+
+            // チェインライトニングの特殊処理
+            if (spell.spellId === 'chain_lightning') {
+              let currentChainCount = 0;
+              const maxChains = 3; // spell.mdのLv.1の連鎖回数
+              let lastEnemyX = enemy.x;
+              let lastEnemyY = enemy.y;
+              let currentTargetEnemyId: number | null = enemy.id; // 最初のターゲット
+
+              while (currentChainCount < maxChains) {
+                const availableEnemies = nextEnemies.filter(
+                  (e) => !enemiesHitBySpells.has(e.id) && e.id !== currentTargetEnemyId
+                );
+
+                if (availableEnemies.length === 0) break; // 連鎖する敵がいない
+
+                // 最も近い敵を探す
+                let nextTarget: EnemyData | null = null;
+                let minDistance = Infinity;
+
+                availableEnemies.forEach((e) => {
+                  const dist = Math.sqrt(Math.pow(lastEnemyX - e.x, 2) + Math.pow(lastEnemyY - e.y, 2));
+                  if (dist < minDistance) {
+                    minDistance = dist;
+                    nextTarget = e;
+                  }
+                });
+
+                if (nextTarget) {
+                  newChainLightningEffects.push({
+                    id: chainLightningEffectIdCounterRef.current++,
+                    fromX: lastEnemyX,
+                    fromY: lastEnemyY,
+                    toX: nextTarget.x,
+                    toY: nextTarget.y,
+                    startTime: Date.now(),
+                  });
+                  enemiesHitBySpells.add(nextTarget.id);
+                  newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: nextTarget.x, y: nextTarget.y });
+
+                  lastEnemyX = nextTarget.x;
+                  lastEnemyY = nextTarget.y;
+                  currentTargetEnemyId = nextTarget.id;
+                  currentChainCount++;
+                } else {
+                  break; // 次のターゲットが見つからない
+                }
+              }
+            }
           }
         });
         if (!spellHit) {
@@ -290,6 +381,12 @@ export default function Home() {
       });
       nextExperienceOrbs = remainingOrbs;
 
+      // 古いチェインライトニングエフェクトを削除
+      const now = Date.now();
+      const effectDuration = 200; // 稲妻アニメーションの表示時間 (ms)
+      newChainLightningEffects = [...chainLightningEffects.filter(effect => now - effect.startTime < effectDuration), ...newChainLightningEffects];
+
+
       // 3. 状態のバッチ更新
       if (gamePhaseChanged) return; // ゲームオーバーになったら更新を停止
 
@@ -298,11 +395,12 @@ export default function Home() {
       setExperienceOrbs(nextExperienceOrbs);
       setPlayerHp(nextPlayerHp);
       setCurrentExp(nextCurrentExp);
+      setChainLightningEffects(newChainLightningEffects); // チェインライトニングエフェクトを更新
 
     }, 50);
 
     return () => clearInterval(gameLoop);
-  }, [gamePhase, playerHp, currentExp, spells, enemies, experienceOrbs]);
+  }, [gamePhase, playerHp, currentExp, spells, enemies, experienceOrbs, canvasSize.height, canvasSize.width, chainLightningEffects]);
 
   // プレイヤーの向きを計算するロジック
   useEffect(() => {
@@ -347,12 +445,57 @@ export default function Home() {
       setLevel((prevLevel) => prevLevel + 1);
       setCurrentExp(0); // 経験値をリセット
       setGamePhase('levelUp'); // ゲームを一時停止
-    }
-  }, [currentExp, gamePhase, EXP_TO_LEVEL_UP]); // EXP_TO_LEVEL_UP を依存配列に追加
 
-  const handleLevelUpChoice = (choice: string) => {
-    console.log(`選択肢: ${choice} を選択しました。`);
-    // ここで選択に応じたプレイヤーの性能強化ロジックを実装（今回はダミー）
+      // レベルアップ時の選択肢を生成し、stateに保存
+      const availableSpells = allSpells.filter(
+        (spell) => !acquiredSpells.includes(spell.id)
+      );
+
+      const newSpellChoices = availableSpells.map((spell) => ({
+        id: spell.id,
+        name: spell.name,
+        description: spell.description,
+        type: 'spell' as const,
+      }));
+
+      const upgradeChoices = acquiredSpells.map((spellId) => {
+        const spell = allSpells.find(s => s.id === spellId);
+        return {
+          id: `${spellId}_upgrade`,
+          name: `${spell?.name || '不明な魔法'} 強化`,
+          description: `${spell?.name || '不明な魔法'} の性能を向上させる`,
+          type: 'upgrade' as const,
+        };
+      });
+
+      // 新しい魔法の選択肢と既存魔法の強化選択肢を混ぜて、ランダムに3つ選択
+      const allPossibleChoices = [...newSpellChoices, ...upgradeChoices];
+      const shuffledChoices = allPossibleChoices.sort(() => 0.5 - Math.random());
+      setLevelUpChoices(shuffledChoices.slice(0, 3));
+    }
+  }, [currentExp, gamePhase, EXP_TO_LEVEL_UP, acquiredSpells]); // acquiredSpells を依存配列に追加
+
+  const handleLevelUpChoice = (choiceId: string) => {
+    console.log(`選択肢: ${choiceId} を選択しました。`);
+
+    if (choiceId.endsWith('_upgrade')) {
+      const originalSpellId = choiceId.replace('_upgrade', '');
+      const upgradedSpell = allSpells.find(spell => spell.id === originalSpellId);
+      console.log(`${upgradedSpell?.name || '不明な魔法'} を強化しました！`);
+      // ここで実際の強化ロジックを実装（例: 威力やクールダウンの変更）
+    } else {
+      const chosenSpell = allSpells.find(spell => spell.id === choiceId);
+      if (chosenSpell) {
+        // 新しい魔法の習得
+        setAcquiredSpells((prevSpells) => {
+          if (!prevSpells.includes(chosenSpell.id)) {
+            return [...prevSpells, chosenSpell.id];
+          }
+          return prevSpells;
+        });
+        console.log(`新しい魔法 ${chosenSpell.name} を習得しました！`);
+      }
+    }
     setGamePhase('playing'); // ゲームを再開
   };
 
@@ -396,7 +539,7 @@ export default function Home() {
             <>
               <Player x={playerX} y={playerY} direction={playerDirection} />
               {spells.map((spell) => (
-                <Spell key={spell.id} x={spell.x} y={spell.y} />
+                <Spell key={spell.id} x={spell.x} y={spell.y} spellId={spell.spellId} />
               ))}
               {enemies.map((enemy) => (
                 <Enemy key={enemy.id} x={enemy.x} y={enemy.y} />
@@ -404,11 +547,27 @@ export default function Home() {
               {experienceOrbs.map((orb) => (
                 <ExperienceOrb key={orb.id} x={orb.x} y={orb.y} />
               ))}
+              {chainLightningEffects.map((effect) => (
+                <ChainLightningEffect
+                  key={effect.id}
+                  id={effect.id}
+                  fromX={effect.fromX}
+                  fromY={effect.fromY}
+                  toX={effect.toX}
+                  toY={effect.toY}
+                  duration={200} // アニメーション表示時間
+                  onComplete={(idToRemove) => {
+                    setChainLightningEffects((prevEffects) =>
+                      prevEffects.filter((e) => e.id !== idToRemove)
+                    );
+                  }}
+                />
+              ))}
             </>
           )}
 
           {gamePhase === 'levelUp' && (
-            <LevelUpScreen level={level} onChoice={handleLevelUpChoice} />
+            <LevelUpScreen level={level} choices={levelUpChoices} onChoice={handleLevelUpChoice} />
           )}
 
           {gamePhase === 'gameOver' && (
