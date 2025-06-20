@@ -26,6 +26,8 @@ interface SpellData {
   status: 'flying' | 'impact' | 'fading'; // 魔法の状態
   startTime: number; // 生成された時刻
   impactTime?: number; // 着弾した時刻
+  penetrationLeft?: number; // 貫通回数の残り
+  hitEnemyIds?: number[]; // 既にヒットした敵のIDリスト
 }
 
 interface EnemyData {
@@ -33,6 +35,7 @@ interface EnemyData {
   x: number;
   y: number;
   hp: number; // HPを追加
+  stunnedUntil?: number; // 行動不能が解除される時刻 (Unix timestamp)
 }
 
 interface ExperienceOrbData {
@@ -73,6 +76,7 @@ export default function Home() {
   const [playerMaxHp, setPlayerMaxHp] = useState(100); // プレイヤーの最大HP (仮)
   const [playerMana, setPlayerMana] = useState(50); // プレイヤーのマナ (仮)
   const [playerMaxMana, setPlayerMaxMana] = useState(50); // プレイヤーの最大マナ (仮)
+  const [playerStunnedUntil, setPlayerStunnedUntil] = useState(0); // プレイヤーの行動不能解除時刻 (Unix timestamp)
   const [acquiredSpells, setAcquiredSpells] = useState<string[]>(['magic_fist']); // 習得済みの魔法
   const [activeSpells, setActiveSpells] = useState<string[]>(['magic_fist']); // 発動中の魔法
   const [levelUpChoices, setLevelUpChoices] = useState<Choice[]>([]); // レベルアップ時の選択肢を保持
@@ -138,13 +142,17 @@ export default function Home() {
         const newX = Math.min(Math.max(0, event.clientX - rect.left), canvasSize.width);
         const newY = Math.min(Math.max(0, event.clientY - rect.top), canvasSize.height);
 
-        setPlayerX(newX);
-        setPlayerY(newY);
-        playerXRef.current = newX; // refを更新
-        playerYRef.current = newY; // refを更新
+        const now = Date.now(); // nowの宣言を移動
+
+        // プレイヤーが行動不能状態でない場合のみ移動を許可
+        if (now >= playerStunnedUntil) {
+          setPlayerX(newX);
+          setPlayerY(newY);
+          playerXRef.current = newX; // refを更新
+          playerYRef.current = newY; // refを更新
+        }
 
         // 移動履歴を更新
-        const now = Date.now();
         positionHistoryRef.current = positionHistoryRef.current.filter(p => now - p.timestamp < 1000); // 古い履歴を削除
         positionHistoryRef.current.push({ x: newX, y: newY, timestamp: now });
       }
@@ -155,7 +163,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [canvasSize]); // canvasSize を依存配列に追加
+  }, [canvasSize, playerStunnedUntil]); // canvasSize と playerStunnedUntil を依存配列に追加
 
   // playerDirection の state が更新されたら、ref の値も更新する
   useEffect(() => {
@@ -194,6 +202,8 @@ export default function Home() {
               spellId: spell.id,
               status: 'flying', // 初期状態は飛翔中
               startTime: now, // 生成時刻を記録
+              penetrationLeft: spell.penetrationCount, // 貫通回数を設定
+              hitEnemyIds: [], // ヒットした敵のIDリストを初期化
             },
           ]);
 
@@ -257,36 +267,37 @@ export default function Home() {
   useEffect(() => {
     if (gamePhase !== 'playing') return;
 
-    const gameLoop = setInterval(() => {
-      // 状態更新をバッチ処理するための準備
-      let nextSpells = spells;
-      let nextEnemies = enemies;
-      let nextPlayerHp = playerHp;
-      let nextCurrentExp = currentExp;
-      let gamePhaseChanged = false;
-      let newChainLightningEffects: typeof chainLightningEffects = [];
-      let nextGroundEffects = groundEffects; // 地面効果のstateをコピー
-      const now = Date.now();
-      const IMPACT_EFFECT_DURATION = 500; // 着弾エフェクトの表示時間 (ms)
+      const gameLoop = setInterval(() => {
+        // 状態更新をバッチ処理するための準備
+        let nextSpells = spells;
+        let nextEnemies = enemies;
+        let nextPlayerHp = playerHp;
+        let nextCurrentExp = currentExp;
+        let nextPlayerStunnedUntil = playerStunnedUntil; // プレイヤーの行動不能解除時刻をコピー
+        let gamePhaseChanged = false;
+        let newChainLightningEffects: typeof chainLightningEffects = [];
+        let nextGroundEffects = groundEffects; // 地面効果のstateをコピー
+        const now = Date.now();
+        const IMPACT_EFFECT_DURATION = 500; // 着弾エフェクトの表示時間 (ms)
 
-      // 1. 魔法の位置更新、寿命判定、衝突判定、状態遷移
-      const processedSpells: SpellData[] = [];
-      const enemiesHitBySpells = new Set<number>();
-      const newOrbs: ExperienceOrbData[] = []; // 新しく生成されるオーブ
+        // 1. 魔法の位置更新、寿命判定、衝突判定、状態遷移
+        const processedSpells: SpellData[] = [];
+        const enemiesHitBySpells = new Set<number>();
+        const newOrbs: ExperienceOrbData[] = []; // 新しく生成されるオーブ
 
-      spells.forEach((spell) => { // Iterate over the original spells state
-        const spellInfo = allSpells.find(s => s.id === spell.spellId);
-        if (!spellInfo) {
-          // If spell info is missing, just remove it.
-          return;
-        }
+        spells.forEach((spell) => { // Iterate over the original spells state
+          const spellInfo = allSpells.find(s => s.id === spell.spellId);
+          if (!spellInfo) {
+            // If spell info is missing, just remove it.
+            return;
+          }
 
-        const currentSpell = { ...spell }; // Create a mutable copy
+          const currentSpell = { ...spell }; // Create a mutable copy
 
-        if (currentSpell.status === 'flying') {
-          // Update position
-          currentSpell.x += currentSpell.dx;
-          currentSpell.y += currentSpell.dy;
+          if (currentSpell.status === 'flying') {
+            // Update position
+            currentSpell.x += currentSpell.dx;
+            currentSpell.y += currentSpell.dy;
 
           // Check lifetime
           if (now - currentSpell.startTime > spellInfo.lifetime * 1000) {
@@ -301,19 +312,44 @@ export default function Home() {
           }
 
           // Collision detection for flying spells
-          let spellHitEnemy = false;
-          nextEnemies.forEach((enemy) => {
-            if (enemiesHitBySpells.has(enemy.id)) return;
+          let spellShouldImpact = false; // スペルが最終的に消滅するかどうか
+          nextEnemies = nextEnemies.map((enemy) => { // nextEnemiesを直接変更するためmapを使用
+            // このスペルが既にヒットした敵は無視する
+            if (currentSpell.hitEnemyIds && currentSpell.hitEnemyIds.includes(enemy.id)) {
+              return enemy; // 既にヒットした敵はそのまま返す
+            }
 
             const collisionRadius = 20; // Assuming a default collision radius
             const distance = Math.sqrt(Math.pow(currentSpell.x - enemy.x, 2) + Math.pow(currentSpell.y - enemy.y, 2));
 
             if (distance < collisionRadius) {
-              spellHitEnemy = true;
-              enemiesHitBySpells.add(enemy.id);
+              // 敵にダメージを与える処理
+              enemy.hp -= spellInfo.baseDamage; // 例: ダメージ適用
+
+              // 敵に行動不能効果を適用
+              if (spellInfo.stunDurationOnHit) {
+                enemy.stunnedUntil = now + spellInfo.stunDurationOnHit * 1000;
+              }
+
+              // 経験値オーブを生成
               newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: enemy.x, y: enemy.y });
 
-              // Chain Lightning specific logic
+              // ヒットした敵のIDを記録
+              if (!currentSpell.hitEnemyIds) {
+                currentSpell.hitEnemyIds = [];
+              }
+              currentSpell.hitEnemyIds.push(enemy.id);
+
+              // 貫通処理
+              if (currentSpell.penetrationLeft !== undefined && currentSpell.penetrationLeft > 0) {
+                currentSpell.penetrationLeft--;
+                // 貫通回数が残っている場合、スペルは消滅しない
+              } else {
+                // 貫通回数が0になった、または貫通しないスペルの場合
+                spellShouldImpact = true;
+              }
+
+              // Chain Lightning specific logic (既存のロジックを維持)
               if (currentSpell.spellId === 'chain_lightning') {
                 let currentChainCount = 0;
                 const maxChains = 3;
@@ -351,6 +387,11 @@ export default function Home() {
                     enemiesHitBySpells.add(nextTarget.id);
                     newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: nextTarget.x, y: nextTarget.y });
 
+                    // 連鎖した敵にも行動不能効果を適用
+                    if (spellInfo.stunDurationOnHit) {
+                      nextTarget.stunnedUntil = now + spellInfo.stunDurationOnHit * 1000;
+                    }
+
                     lastEnemyX = nextTarget.x;
                     lastEnemyY = nextTarget.y;
                     currentTargetEnemyId = nextTarget.id;
@@ -361,9 +402,47 @@ export default function Home() {
                 }
               }
             }
+            return enemy; // 変更された敵オブジェクトを返す
           });
 
-          if (spellHitEnemy) {
+
+            if (spellShouldImpact) {
+            // --- ここから追加 ---
+            // 着弾時の範囲ダメージ
+            if (spellInfo.damageRangeOnHit > 0) {
+              nextEnemies.forEach(enemy => {
+                // 既にこのスペルで直接ダメージを受けた敵は対象外
+                if (currentSpell.hitEnemyIds?.includes(enemy.id)) return;
+
+                const distance = Math.sqrt(Math.pow(currentSpell.x - enemy.x, 2) + Math.pow(currentSpell.y - enemy.y, 2));
+                if (distance < spellInfo.damageRangeOnHit) {
+                  enemy.hp -= spellInfo.baseDamage;
+                  // 範囲ダメージでも行動不能効果を適用
+                  if (spellInfo.stunDurationOnHit) {
+                    enemy.stunnedUntil = now + spellInfo.stunDurationOnHit * 1000;
+                  }
+                }
+              });
+            }
+
+            // 着弾時の自傷ダメージ
+            if (spellInfo.isSelfDamage && spellInfo.damageRangeOnHit > 0) {
+                const distanceToPlayer = Math.sqrt(Math.pow(currentSpell.x - playerXRef.current, 2) + Math.pow(currentSpell.y - playerYRef.current, 2));
+                if (distanceToPlayer < spellInfo.damageRangeOnHit) {
+                    nextPlayerHp -= spellInfo.baseDamage; // 自傷ダメージ
+                    if (nextPlayerHp <= 0) {
+                        if (timerRef.current) clearInterval(timerRef.current);
+                        setGamePhase('gameOver');
+                        gamePhaseChanged = true;
+                    }
+                    // 自傷ダメージでも行動不能効果を適用
+                    if (spellInfo.stunDurationOnHit) {
+                        nextPlayerStunnedUntil = Math.max(nextPlayerStunnedUntil, now + spellInfo.stunDurationOnHit * 1000);
+                    }
+                }
+            }
+            // --- ここまで追加 ---
+
             currentSpell.status = 'impact';
             currentSpell.dx = 0; // Stop movement
             currentSpell.dy = 0;
@@ -394,6 +473,9 @@ export default function Home() {
         processedSpells.push(currentSpell);
       });
       nextSpells = processedSpells; // Update nextSpells with the processed list
+
+      // 敵のHPが0以下になった敵をフィルタリング
+      nextEnemies = nextEnemies.filter(enemy => enemy.hp > 0);
 
       // 地面効果の寿命判定とダメージ処理
       const PLAYER_DAMAGE_COOLDOWN = 500; // プレイヤーの無敵時間 (ms)
@@ -449,6 +531,11 @@ export default function Home() {
 
       const enemySpeed = 2;
       nextEnemies = nextEnemies.map((enemy) => {
+        // 敵が行動不能状態でない場合のみ移動を許可
+        if (enemy.stunnedUntil && now < enemy.stunnedUntil) {
+          return enemy; // 行動不能中は移動しない
+        }
+
         const dx = playerXRef.current - enemy.x;
         const dy = playerYRef.current - enemy.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -468,6 +555,11 @@ export default function Home() {
         if (enemiesHitBySpells.has(enemy.id)) {
           return false; // Remove enemies hit by spells
         }
+        // 敵が行動不能状態でない場合のみプレイヤーとの衝突判定を行う
+        if (enemy.stunnedUntil && now < enemy.stunnedUntil) {
+          return true; // 行動不能中は衝突しないので残す
+        }
+
         const distance = Math.sqrt(Math.pow(playerXRef.current - enemy.x, 2) + Math.pow(playerYRef.current - enemy.y, 2));
         if (distance < 25) { // Player-enemy collision
           nextPlayerHp -= 10;
@@ -516,13 +608,14 @@ export default function Home() {
       setExperienceOrbs(nextExperienceOrbs);
       setPlayerHp(nextPlayerHp);
       setCurrentExp(nextCurrentExp);
+      setPlayerStunnedUntil(nextPlayerStunnedUntil); // プレイヤーの行動不能解除時刻を更新
       setChainLightningEffects(newChainLightningEffects); // チェインライトニングエフェクトを更新
       setGroundEffects(nextGroundEffects); // 地面効果を更新
 
     }, 50);
 
     return () => clearInterval(gameLoop);
-  }, [gamePhase, playerHp, currentExp, spells, enemies, experienceOrbs, canvasSize.height, canvasSize.width, chainLightningEffects, groundEffects, playerLastDamagedTime]); // playerX, playerY を依存配列から削除
+  }, [gamePhase, playerHp, currentExp, spells, enemies, experienceOrbs, canvasSize.height, canvasSize.width, chainLightningEffects, groundEffects, playerLastDamagedTime, playerStunnedUntil]); // playerX, playerY を依存配列から削除
 
   // プレイヤーの向きを計算するロジック
   useEffect(() => {

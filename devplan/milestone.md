@@ -64,8 +64,27 @@ graph TD
         -   [x] **各魔法が、固有のクールダウンとマナ消費に基づいて、独立して自動発動するように修正**
         -   [x] **チェインライトニングの連鎖攻撃にアニメーションを追加**
         -   [x] **魔法に寿命、弾速、着弾範囲、自傷有無の概念を追加**
+            -   `kigame/src/data/spells.ts`に`GroundEffect`インターフェースと`Spell`インターフェースの`groundEffect`プロパティを追加し、`fireball`のデータに地面効果の定義を追加。
+            -   `fireball`の`groundEffect.duration`を10秒に延長。
         -   [x] **魔法の視覚表現を「飛翔体」と「着弾エフェクト」に分離**
-    -   [ ] **敵システム:**
+            -   `kigame/src/components/GroundFlameEffect.tsx`を作成し、地面効果の視覚的な表示を担当。
+            -   `kigame/src/styles/spells.css`に`ground-flame-effect`のCSSアニメーションを追加。
+        -   [x] **魔法に自傷ダメージと行動不能効果を実装し、それに伴うゲームロジックを修正**
+            -   `kigame/src/app/page.tsx`のゲームループ内で、地面効果とプレイヤーの衝突判定を行い、ダメージを与えるロジックを実装。プレイヤーの無敵時間も考慮。
+            -   `kigame/src/app/page.tsx`のゲームループ内で、地面効果と敵の衝突判定を行い、ダメージを与えるロジックを実装。敵のHPが0以下になったら削除し、経験値オーブを生成。
+            -   `kigame/src/app/page.tsx`のゲームループの依存配列から`playerX`と`playerY`を削除し、マウス移動によるゲームループの停止を解消。
+        -   [x] **「魔法管理バー」システムを実装し、実装**
+            -   `kigame/src/components/SpellBar.tsx`を新規作成し、習得済み魔法のリスト、クールダウンの進捗バー（Mantine Progress）、ON/OFFスイッチ（Mantine Switch）、毎秒マナ消費量（MPS）を表示。
+            -   `kigame/src/app/page.tsx`に`SpellBar`コンポーネントを組み込み、`activeSpells`stateで魔法の発動状態を管理し、ON/OFFを切り替えられるように修正。
+            -   `SpellBar`のクールダウン表示がリアルタイムで更新されるように、`useState`と`useEffect`を追加。
+            -   UI要素の重なり順を修正するため、`kigame/src/components/Player.tsx`の`z-index`を`10`に設定。
+        -   [x] **アイシクルランスの貫通を実装**
+            -   `kigame/src/data/spells.ts`に`penetrationCount`プロパティを追加し、`icicle_lance`に貫通回数を設定。
+            -   `kigame/src/app/page.tsx`の`SpellData`インターフェースに`penetrationLeft`と`hitEnemyIds`を追加。
+            -   スペル生成時に`penetrationLeft`と`hitEnemyIds`を初期化するように修正。
+            -   ゲームループ内の衝突判定ロジックを修正し、貫通処理と敵へのダメージ適用を実装。
+    -   [x] **敵システム:**
+        -   [x] 敵にHPの概念を追加し、地面効果によるダメージで敵が倒れるように修正。
         -   [ ] 役割の異なる敵（`狙撃手`など）を1-2種類追加
         -   [ ] 特定の生存時間でボス（`勇者`）が出現する
 -   **画面遷移 (`pagetransition.md`)**
@@ -94,7 +113,7 @@ graph TD
 
 -   **魔法システム (`spell.md`)**
     -   [ ] 基本魔法の種類をすべて追加
-    -   [ ] **「魔法調整盤」**システムを実装し、実装
+    -   [ ] 魔法調整盤の種類をすべて追加
     -   [ ] **「合成魔法」**システムを実装し、実装
 -   **コンテンツ (`specification.md`)**
     -   [ ] 敵キャラクターの種類を大幅に追加
