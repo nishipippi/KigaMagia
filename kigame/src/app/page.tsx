@@ -5,6 +5,10 @@ import Player from '../components/Player';
 import Spell from '../components/Spell';
 import Enemy from '../components/Enemy';
 import ExperienceOrb from '../components/ExperienceOrb';
+import TitleScreen from '../components/TitleScreen'; // TitleScreenをインポート
+import HUD from '../components/HUD'; // HUDをインポート
+import LevelUpScreen from '../components/LevelUpScreen'; // LevelUpScreenをインポート
+import ResultScreen from '../components/ResultScreen'; // ResultScreenをインポート
 
 interface SpellData {
   id: number;
@@ -26,7 +30,7 @@ interface ExperienceOrbData {
   y: number;
 }
 
-type GamePhase = 'playing' | 'levelUp' | 'gameOver';
+type GamePhase = 'title' | 'playing' | 'levelUp' | 'gameOver';
 
 export default function Home() {
   const [playerX, setPlayerX] = useState(400); // 初期位置X
@@ -46,18 +50,57 @@ export default function Home() {
   const [currentExp, setCurrentExp] = useState(0);
   const [level, setLevel] = useState(1);
   const [playerHp, setPlayerHp] = useState(100); // プレイヤーのHP
-  const [gamePhase, setGamePhase] = useState<GamePhase>('playing');
+  const [playerMaxHp, setPlayerMaxHp] = useState(100); // プレイヤーの最大HP (仮)
+  const [playerMana, setPlayerMana] = useState(50); // プレイヤーのマナ (仮)
+  const [playerMaxMana, setPlayerMaxMana] = useState(50); // プレイヤーの最大マナ (仮)
+  const [gamePhase, setGamePhase] = useState<GamePhase>('title'); // 初期状態を'title'に変更
+  const [survivalTime, setSurvivalTime] = useState(0); // 生存時間
+  const timerRef = useRef<NodeJS.Timeout | null>(null); // タイマー参照
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 }); // キャンバスサイズ
 
   const EXP_TO_LEVEL_UP = 10;
-  const GAME_CANVAS_HEIGHT = 600; // ゲームキャンバスの高さ
+  // const GAME_CANVAS_HEIGHT = 600; // ゲームキャンバスの高さ (不要になるためコメントアウト)
+
+  const handleStartGame = () => {
+    // ゲーム状態を初期化
+    setPlayerX(canvasSize.width / 2); // 中央に配置
+    setPlayerY(canvasSize.height / 2); // 中央に配置
+    setPlayerDirection({ dx: 0, dy: -1 });
+    setSpells([]);
+    setEnemies([]);
+    setExperienceOrbs([]);
+    setCurrentExp(0);
+    setLevel(1);
+    setPlayerHp(100);
+    setPlayerMaxHp(100); // リセット時に最大HPも設定
+    setPlayerMana(50); // リセット時にマナも設定
+    setPlayerMaxMana(50); // リセット時に最大マナも設定
+    setSurvivalTime(0); // 生存時間をリセット
+    if (timerRef.current) clearInterval(timerRef.current); // 既存タイマーをクリア
+    timerRef.current = setInterval(() => {
+      setSurvivalTime(prev => prev + 1);
+    }, 1000); // 1秒ごとに生存時間を更新
+    setGamePhase('playing');
+  };
+
+  // キャンバスサイズをウィンドウサイズに合わせる
+  useEffect(() => {
+    const handleResize = () => {
+      setCanvasSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+    handleResize(); // 初期サイズを設定
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       const canvas = document.getElementById('game-canvas');
       if (canvas) {
         const rect = canvas.getBoundingClientRect();
-        const newX = event.clientX - rect.left;
-        const newY = event.clientY - rect.top;
+        // プレイヤーがキャンバス外に出ないように座標を制限
+        const newX = Math.min(Math.max(0, event.clientX - rect.left), canvasSize.width);
+        const newY = Math.min(Math.max(0, event.clientY - rect.top), canvasSize.height);
 
         setPlayerX(newX);
         setPlayerY(newY);
@@ -76,7 +119,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, []);
+  }, [canvasSize]); // canvasSize を依存配列に追加
 
   // playerDirection の state が更新されたら、ref の値も更新する
   useEffect(() => {
@@ -111,11 +154,37 @@ export default function Home() {
     if (gamePhase !== 'playing') return;
 
     const enemyInterval = setInterval(() => {
-      setEnemies((prevEnemies) => [
-        ...prevEnemies,
-        { id: enemyIdCounterRef.current, x: Math.random() * 800, y: 0 },
-      ]);
-      enemyIdCounterRef.current += 1; // refを更新
+      setEnemies((prevEnemies) => {
+        const spawnSide = Math.floor(Math.random() * 4); // 0:上, 1:下, 2:左, 3:右
+        let spawnX, spawnY;
+
+        switch (spawnSide) {
+          case 0: // 上辺
+            spawnX = Math.random() * canvasSize.width;
+            spawnY = 0;
+            break;
+          case 1: // 下辺
+            spawnX = Math.random() * canvasSize.width;
+            spawnY = canvasSize.height;
+            break;
+          case 2: // 左辺
+            spawnX = 0;
+            spawnY = Math.random() * canvasSize.height;
+            break;
+          case 3: // 右辺
+            spawnX = canvasSize.width;
+            spawnY = Math.random() * canvasSize.height;
+            break;
+          default:
+            spawnX = Math.random() * canvasSize.width;
+            spawnY = 0;
+        }
+
+        return [
+          ...prevEnemies,
+          { id: enemyIdCounterRef.current++, x: spawnX, y: spawnY },
+        ];
+      });
     }, 2000);
 
     return () => clearInterval(enemyInterval);
@@ -137,7 +206,8 @@ export default function Home() {
       // 1. 位置更新
       nextSpells = nextSpells
         .map((spell) => ({ ...spell, x: spell.x + spell.dx, y: spell.y + spell.dy }))
-        .filter((spell) => spell.y > 0 && spell.y < GAME_CANVAS_HEIGHT && spell.x > 0 && spell.x < 800);
+        // 魔法の画面外判定を動的なキャンバスサイズに基づいて修正
+        .filter((spell) => spell.y > 0 && spell.y < canvasSize.height && spell.x > 0 && spell.x < canvasSize.width);
 
       const enemySpeed = 2;
       nextEnemies = nextEnemies.map((enemy) => {
@@ -146,7 +216,14 @@ export default function Home() {
         const distance = Math.sqrt(dx * dx + dy * dy);
         const moveX = (dx / distance) * enemySpeed;
         const moveY = (dy / distance) * enemySpeed;
-        return { ...enemy, x: enemy.x + moveX, y: enemy.y + moveY };
+        // 敵がキャンバス外に出ないように座標を制限
+        const newEnemyX = enemy.x + moveX;
+        const newEnemyY = enemy.y + moveY;
+        return {
+          ...enemy,
+          x: Math.max(0, Math.min(newEnemyX, canvasSize.width)),
+          y: Math.max(0, Math.min(newEnemyY, canvasSize.height)),
+        };
       });
 
       const orbSpeed = 3;
@@ -192,6 +269,7 @@ export default function Home() {
         if (distance < 25) {
           nextPlayerHp -= 10;
           if (nextPlayerHp <= 0) {
+            if (timerRef.current) clearInterval(timerRef.current); // ゲームオーバー時にタイマーを停止
             setGamePhase('gameOver');
             gamePhaseChanged = true;
           }
@@ -278,63 +356,65 @@ export default function Home() {
     setGamePhase('playing'); // ゲームを再開
   };
 
+  const handleRestartGame = () => {
+    handleStartGame(); // ゲーム開始時のロジックを再利用
+  };
+
+  const handleGoToTitle = () => {
+    setGamePhase('title'); // ゲーム状態をタイトルに戻す
+  };
+
   return (
-    <div id="game-canvas" style={{ width: '800px', height: '600px', backgroundColor: 'black', margin: '50px auto', border: '1px solid white', position: 'relative', overflow: 'hidden' }}>
-      {/* ゲーム画面の描画キャンバス */}
-      <h1 style={{ color: 'white', textAlign: 'center', marginTop: '200px' }}>Game Canvas</h1>
-      <p style={{ color: 'white', position: 'absolute', top: '10px', left: '10px' }}>HP: {playerHp}</p> {/* HP表示を追加 */}
-      <p style={{ color: 'white', position: 'absolute', top: '30px', left: '10px' }}>EXP: {currentExp}/{EXP_TO_LEVEL_UP}</p> {/* EXP表示を追加 */}
-      <p style={{ color: 'white', position: 'absolute', top: '50px', left: '10px' }}>Level: {level}</p> {/* Level表示を追加 */}
+    <div
+      id="game-canvas"
+      style={{
+        width: `${canvasSize.width}px`, // 動的な幅
+        height: `${canvasSize.height}px`, // 動的な高さ
+        backgroundColor: 'black',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {gamePhase === 'title' && <TitleScreen onStartGame={handleStartGame} />}
 
-      <Player x={playerX} y={playerY} direction={playerDirection} />
-      {spells.map((spell) => (
-        <Spell key={spell.id} x={spell.x} y={spell.y} />
-      ))}
-      {enemies.map((enemy) => (
-        <Enemy key={enemy.id} x={enemy.x} y={enemy.y} />
-      ))}
-      {experienceOrbs.map((orb) => (
-        <ExperienceOrb key={orb.id} x={orb.x} y={orb.y} />
-      ))}
+      {gamePhase !== 'title' && (
+        <>
+          {/* HUDコンポーネント */}
+          <HUD
+            survivalTime={survivalTime}
+            level={level}
+            currentExp={currentExp}
+            expToLevelUp={EXP_TO_LEVEL_UP}
+            playerHp={playerHp}
+            playerMaxHp={playerMaxHp}
+            playerMana={playerMana}
+            playerMaxMana={playerMaxMana}
+          />
 
-      {gamePhase === 'levelUp' && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: '20px',
-          borderRadius: '10px',
-          color: 'white',
-          textAlign: 'center',
-          zIndex: 100,
-        }}>
-          <h2>レベルアップ！</h2>
-          <p>現在のレベル: {level}</p>
-          <p>選択肢を選んでください:</p>
-          <button onClick={() => handleLevelUpChoice('威力UP')} style={{ margin: '10px', padding: '10px', backgroundColor: 'green', color: 'white', border: 'none', borderRadius: '5px' }}>威力UP</button>
-          <button onClick={() => handleLevelUpChoice('範囲UP')} style={{ margin: '10px', padding: '10px', backgroundColor: 'green', color: 'white', border: 'none', borderRadius: '5px' }}>新魔法</button>
-        </div>
-      )}
+          {/* ゲーム画面の描画キャンバス */}
+          {gamePhase === 'playing' && (
+            <>
+              <Player x={playerX} y={playerY} direction={playerDirection} />
+              {spells.map((spell) => (
+                <Spell key={spell.id} x={spell.x} y={spell.y} />
+              ))}
+              {enemies.map((enemy) => (
+                <Enemy key={enemy.id} x={enemy.x} y={enemy.y} />
+              ))}
+              {experienceOrbs.map((orb) => (
+                <ExperienceOrb key={orb.id} x={orb.x} y={orb.y} />
+              ))}
+            </>
+          )}
 
-      {gamePhase === 'gameOver' && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: '20px',
-          borderRadius: '10px',
-          color: 'white',
-          textAlign: 'center',
-          zIndex: 100,
-        }}>
-          <h2>ゲームオーバー</h2>
-          <p>あなたのレベル: {level}</p>
-          <p>コンソールに「ゲームオーバー」と表示されました。</p>
-        </div>
+          {gamePhase === 'levelUp' && (
+            <LevelUpScreen level={level} onChoice={handleLevelUpChoice} />
+          )}
+
+          {gamePhase === 'gameOver' && (
+            <ResultScreen survivalTime={survivalTime} level={level} onRestart={handleRestartGame} onGoToTitle={handleGoToTitle} />
+          )}
+        </>
       )}
     </div>
   );
