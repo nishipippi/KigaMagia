@@ -30,14 +30,12 @@ const HUD: React.FC<HUDProps> = ({ survivalTime, level, currentExp, expToLevelUp
       left={0}
       w="100%"
       h="100%"
-      style={{ pointerEvents: 'none' }}
-      styles={{
-        root: {
-          zIndex: 150,
-          color: 'white',
-          fontFamily: 'Arial, sans-serif',
-          textShadow: '1px 1px 2px black',
-        },
+      style={{
+        pointerEvents: 'none',
+        zIndex: 150,
+        color: 'white',
+        fontFamily: 'Arial, sans-serif',
+        textShadow: '1px 1px 2px black',
       }}
     >
       {/* 上部中央: 生存時間 */}

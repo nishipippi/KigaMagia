@@ -261,7 +261,7 @@ export default function Home() {
           return;
         }
 
-        let currentSpell = { ...spell }; // Create a mutable copy
+        const currentSpell = { ...spell }; // Create a mutable copy
 
         if (currentSpell.status === 'flying') {
           // Update position
@@ -311,13 +311,13 @@ export default function Home() {
                   let nextTarget: EnemyData | null = null;
                   let minDistance = Infinity;
 
-                  availableEnemies.forEach((e) => {
+                  for (const e of availableEnemies) {
                     const dist = Math.sqrt(Math.pow(lastEnemyX - e.x, 2) + Math.pow(lastEnemyY - e.y, 2));
                     if (dist < minDistance) {
                       minDistance = dist;
                       nextTarget = e;
                     }
-                  });
+                  }
 
                   if (nextTarget) {
                     newChainLightningEffects.push({
@@ -413,7 +413,7 @@ export default function Home() {
         }
         return true; // Keep remaining orbs
       });
-      let nextExperienceOrbs = [...remainingOrbs, ...newOrbs]; // Combine existing uncollected with newly generated
+      const nextExperienceOrbs = [...remainingOrbs, ...newOrbs]; // Combine existing uncollected with newly generated
       nextCurrentExp += collectedExpThisTick; // Add collected experience
 
       // 古いチェインライトニングエフェクトを削除
