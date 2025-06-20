@@ -20,6 +20,9 @@ interface SpellData {
   dx: number; // 魔法のX方向移動量
   dy: number; // 魔法のY方向移動量
   spellId: string; // 魔法のIDを追加
+  status: 'flying' | 'impact' | 'fading'; // 魔法の状態
+  startTime: number; // 生成された時刻
+  impactTime?: number; // 着弾した時刻
 }
 
 interface EnemyData {
@@ -146,7 +149,6 @@ export default function Home() {
 
     const gameTickInterval = setInterval(() => {
       const now = Date.now();
-      const spellSpeed = 10; // 魔法の速度
       const direction = playerDirectionRef.current; // refから最新の向きを取得
 
       // マナ回復
@@ -168,9 +170,11 @@ export default function Home() {
               id: spellIdCounterRef.current++,
               x: playerXRef.current,
               y: playerYRef.current,
-              dx: direction.dx * spellSpeed,
-              dy: direction.dy * spellSpeed,
+              dx: direction.dx * spell.speed, // 魔法固有の速度を使用
+              dy: direction.dy * spell.speed, // 魔法固有の速度を使用
               spellId: spell.id,
+              status: 'flying', // 初期状態は飛翔中
+              startTime: now, // 生成時刻を記録
             },
           ]);
 
@@ -238,17 +242,123 @@ export default function Home() {
       // 状態更新をバッチ処理するための準備
       let nextSpells = spells;
       let nextEnemies = enemies;
-      let nextExperienceOrbs = experienceOrbs;
       let nextPlayerHp = playerHp;
       let nextCurrentExp = currentExp;
       let gamePhaseChanged = false;
       let newChainLightningEffects: typeof chainLightningEffects = [];
+      const now = Date.now();
+      const IMPACT_EFFECT_DURATION = 500; // 着弾エフェクトの表示時間 (ms)
 
-      // 1. 位置更新
-      nextSpells = nextSpells
-        .map((spell) => ({ ...spell, x: spell.x + spell.dx, y: spell.y + spell.dy }))
-        // 魔法の画面外判定を動的なキャンバスサイズに基づいて修正
-        .filter((spell) => spell.y > 0 && spell.y < canvasSize.height && spell.x > 0 && spell.x < canvasSize.width);
+      // 1. 魔法の位置更新、寿命判定、衝突判定、状態遷移
+      const processedSpells: SpellData[] = [];
+      const enemiesHitBySpells = new Set<number>();
+      const newOrbs: ExperienceOrbData[] = []; // 新しく生成されるオーブ
+
+      spells.forEach((spell) => { // Iterate over the original spells state
+        const spellInfo = allSpells.find(s => s.id === spell.spellId);
+        if (!spellInfo) {
+          // If spell info is missing, just remove it.
+          return;
+        }
+
+        let currentSpell = { ...spell }; // Create a mutable copy
+
+        if (currentSpell.status === 'flying') {
+          // Update position
+          currentSpell.x += currentSpell.dx;
+          currentSpell.y += currentSpell.dy;
+
+          // Check lifetime
+          if (now - currentSpell.startTime > spellInfo.lifetime * 1000) {
+            // Spell expired, do not add to processedSpells
+            return;
+          }
+
+          // Check screen bounds
+          if (currentSpell.y < 0 || currentSpell.y > canvasSize.height || currentSpell.x < 0 || currentSpell.x > canvasSize.width) {
+            // Off-screen, do not add to processedSpells
+            return;
+          }
+
+          // Collision detection for flying spells
+          let spellHitEnemy = false;
+          nextEnemies.forEach((enemy) => {
+            if (enemiesHitBySpells.has(enemy.id)) return;
+
+            const collisionRadius = 20; // Assuming a default collision radius
+            const distance = Math.sqrt(Math.pow(currentSpell.x - enemy.x, 2) + Math.pow(currentSpell.y - enemy.y, 2));
+
+            if (distance < collisionRadius) {
+              spellHitEnemy = true;
+              enemiesHitBySpells.add(enemy.id);
+              newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: enemy.x, y: enemy.y });
+
+              // Chain Lightning specific logic
+              if (currentSpell.spellId === 'chain_lightning') {
+                let currentChainCount = 0;
+                const maxChains = 3;
+                let lastEnemyX = enemy.x;
+                let lastEnemyY = enemy.y;
+                let currentTargetEnemyId: number | null = enemy.id;
+
+                while (currentChainCount < maxChains) {
+                  const availableEnemies = nextEnemies.filter(
+                    (e) => !enemiesHitBySpells.has(e.id) && e.id !== currentTargetEnemyId
+                  );
+
+                  if (availableEnemies.length === 0) break;
+
+                  let nextTarget: EnemyData | null = null;
+                  let minDistance = Infinity;
+
+                  availableEnemies.forEach((e) => {
+                    const dist = Math.sqrt(Math.pow(lastEnemyX - e.x, 2) + Math.pow(lastEnemyY - e.y, 2));
+                    if (dist < minDistance) {
+                      minDistance = dist;
+                      nextTarget = e;
+                    }
+                  });
+
+                  if (nextTarget) {
+                    newChainLightningEffects.push({
+                      id: chainLightningEffectIdCounterRef.current++,
+                      fromX: lastEnemyX,
+                      fromY: lastEnemyY,
+                      toX: nextTarget.x,
+                      toY: nextTarget.y,
+                      startTime: now,
+                    });
+                    enemiesHitBySpells.add(nextTarget.id);
+                    newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: nextTarget.x, y: nextTarget.y });
+
+                    lastEnemyX = nextTarget.x;
+                    lastEnemyY = nextTarget.y;
+                    currentTargetEnemyId = nextTarget.id;
+                    currentChainCount++;
+                  } else {
+                    break;
+                  }
+                }
+              }
+            }
+          });
+
+          if (spellHitEnemy) {
+            currentSpell.status = 'impact';
+            currentSpell.dx = 0; // Stop movement
+            currentSpell.dy = 0;
+            currentSpell.impactTime = now;
+          }
+        } else if (currentSpell.status === 'impact') {
+          // Check impact effect duration
+          if (currentSpell.impactTime && (now - currentSpell.impactTime > IMPACT_EFFECT_DURATION)) {
+            // Effect finished, do not add to processedSpells
+            return;
+          }
+        }
+        processedSpells.push(currentSpell);
+      });
+      nextSpells = processedSpells; // Update nextSpells with the processed list
 
       const enemySpeed = 2;
       nextEnemies = nextEnemies.map((enemy) => {
@@ -267,8 +377,27 @@ export default function Home() {
         };
       });
 
-      const orbSpeed = 3;
-      nextExperienceOrbs = nextExperienceOrbs.map((orb) => {
+      nextEnemies = nextEnemies.filter((enemy) => {
+        if (enemiesHitBySpells.has(enemy.id)) {
+          return false; // Remove enemies hit by spells
+        }
+        const distance = Math.sqrt(Math.pow(playerXRef.current - enemy.x, 2) + Math.pow(playerYRef.current - enemy.y, 2));
+        if (distance < 25) { // Player-enemy collision
+          nextPlayerHp -= 10;
+          if (nextPlayerHp <= 0) {
+            if (timerRef.current) clearInterval(timerRef.current); // Stop timer on game over
+            setGamePhase('gameOver');
+            gamePhaseChanged = true;
+          }
+          return false; // Remove enemy if it hit the player
+        }
+        return true; // Keep remaining enemies
+      });
+
+      // Process existing experience orbs and combine with new ones
+      let collectedExpThisTick = 0;
+      const orbSpeed = 3; // Orb speed defined here
+      const remainingOrbs = experienceOrbs.map((orb) => { // Move existing orbs
         const dx = playerXRef.current - orb.x;
         const dy = playerYRef.current - orb.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -276,113 +405,18 @@ export default function Home() {
           return { ...orb, x: orb.x + (dx / distance) * orbSpeed, y: orb.y + (dy / distance) * orbSpeed };
         }
         return orb;
-      });
-
-      // 2. 衝突判定
-      const enemiesHitBySpells = new Set<number>();
-      const newOrbs: ExperienceOrbData[] = [];
-      const spellsAfterCollision: SpellData[] = [];
-
-      nextSpells.forEach((spell) => {
-        let spellHit = false;
-        nextEnemies.forEach((enemy) => {
-          if (enemiesHitBySpells.has(enemy.id)) return;
-          const distance = Math.sqrt(Math.pow(spell.x - enemy.x, 2) + Math.pow(spell.y - enemy.y, 2));
-          if (distance < 20) {
-            // 魔法が敵に命中
-            spellHit = true;
-            enemiesHitBySpells.add(enemy.id);
-            newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: enemy.x, y: enemy.y });
-
-            // チェインライトニングの特殊処理
-            if (spell.spellId === 'chain_lightning') {
-              let currentChainCount = 0;
-              const maxChains = 3; // spell.mdのLv.1の連鎖回数
-              let lastEnemyX = enemy.x;
-              let lastEnemyY = enemy.y;
-              let currentTargetEnemyId: number | null = enemy.id; // 最初のターゲット
-
-              while (currentChainCount < maxChains) {
-                const availableEnemies = nextEnemies.filter(
-                  (e) => !enemiesHitBySpells.has(e.id) && e.id !== currentTargetEnemyId
-                );
-
-                if (availableEnemies.length === 0) break; // 連鎖する敵がいない
-
-                // 最も近い敵を探す
-                let nextTarget: EnemyData | null = null;
-                let minDistance = Infinity;
-
-                availableEnemies.forEach((e) => {
-                  const dist = Math.sqrt(Math.pow(lastEnemyX - e.x, 2) + Math.pow(lastEnemyY - e.y, 2));
-                  if (dist < minDistance) {
-                    minDistance = dist;
-                    nextTarget = e;
-                  }
-                });
-
-                if (nextTarget) {
-                  newChainLightningEffects.push({
-                    id: chainLightningEffectIdCounterRef.current++,
-                    fromX: lastEnemyX,
-                    fromY: lastEnemyY,
-                    toX: nextTarget.x,
-                    toY: nextTarget.y,
-                    startTime: Date.now(),
-                  });
-                  enemiesHitBySpells.add(nextTarget.id);
-                  newOrbs.push({ id: experienceOrbIdCounterRef.current++, x: nextTarget.x, y: nextTarget.y });
-
-                  lastEnemyX = nextTarget.x;
-                  lastEnemyY = nextTarget.y;
-                  currentTargetEnemyId = nextTarget.id;
-                  currentChainCount++;
-                } else {
-                  break; // 次のターゲットが見つからない
-                }
-              }
-            }
-          }
-        });
-        if (!spellHit) {
-          spellsAfterCollision.push(spell);
-        }
-      });
-      nextSpells = spellsAfterCollision;
-      if (newOrbs.length > 0) {
-        nextExperienceOrbs = [...nextExperienceOrbs, ...newOrbs];
-      }
-
-      const remainingEnemies: EnemyData[] = [];
-      nextEnemies.forEach((enemy) => {
-        if (enemiesHitBySpells.has(enemy.id)) return;
-        const distance = Math.sqrt(Math.pow(playerXRef.current - enemy.x, 2) + Math.pow(playerYRef.current - enemy.y, 2));
-        if (distance < 25) {
-          nextPlayerHp -= 10;
-          if (nextPlayerHp <= 0) {
-            if (timerRef.current) clearInterval(timerRef.current); // ゲームオーバー時にタイマーを停止
-            setGamePhase('gameOver');
-            gamePhaseChanged = true;
-          }
-        } else {
-          remainingEnemies.push(enemy);
-        }
-      });
-      nextEnemies = remainingEnemies;
-
-      const remainingOrbs: ExperienceOrbData[] = [];
-      nextExperienceOrbs.forEach((orb) => {
+      }).filter((orb) => { // Filter collected orbs
         const distance = Math.sqrt(Math.pow(playerXRef.current - orb.x, 2) + Math.pow(playerYRef.current - orb.y, 2));
-        if (distance < 15) {
-          nextCurrentExp++;
-        } else {
-          remainingOrbs.push(orb);
+        if (distance < 15) { // Player-orb collision
+          collectedExpThisTick++;
+          return false; // Remove collected orb
         }
+        return true; // Keep remaining orbs
       });
-      nextExperienceOrbs = remainingOrbs;
+      let nextExperienceOrbs = [...remainingOrbs, ...newOrbs]; // Combine existing uncollected with newly generated
+      nextCurrentExp += collectedExpThisTick; // Add collected experience
 
       // 古いチェインライトニングエフェクトを削除
-      const now = Date.now();
       const effectDuration = 200; // 稲妻アニメーションの表示時間 (ms)
       newChainLightningEffects = [...chainLightningEffects.filter(effect => now - effect.startTime < effectDuration), ...newChainLightningEffects];
 
@@ -539,7 +573,13 @@ export default function Home() {
             <>
               <Player x={playerX} y={playerY} direction={playerDirection} />
               {spells.map((spell) => (
-                <Spell key={spell.id} x={spell.x} y={spell.y} spellId={spell.spellId} />
+                <Spell
+                  key={spell.id}
+                  x={spell.x}
+                  y={spell.y}
+                  spellId={spell.spellId}
+                  status={spell.status} // 状態を渡す
+                />
               ))}
               {enemies.map((enemy) => (
                 <Enemy key={enemy.id} x={enemy.x} y={enemy.y} />

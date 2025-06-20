@@ -21,11 +21,15 @@ const LevelUpScreen: React.FC<LevelUpScreenProps> = ({ level, choices, onChoice 
     <Modal
       opened={true}
       onClose={() => {}} // モーダルを閉じさせない（選択必須のため）
-      title={<Title order={2} c="#00FFFF">レベルアップ！</Title>}
+      title="レベルアップ！"
       centered
       size="xl"
       overlayProps={{ backgroundOpacity: 0.9, blur: 3 }}
       styles={{
+        title: {
+          color: '#00FFFF',
+          fontSize: '1.5rem', // Adjust size as needed, since Title component is removed
+        },
         content: {
           backgroundColor: 'rgba(0, 0, 0, 0.9)',
           borderRadius: '15px',
