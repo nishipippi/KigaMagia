@@ -1,5 +1,14 @@
 export type SpellAttribute = 'Physical' | 'Fire' | 'Ice' | 'Lightning' | 'Explosion' | 'Slashing';
 
+export interface GroundEffect {
+  id: string; // エフェクトの識別子 (例: 'ground-flame')
+  duration: number; // 持続時間 (秒)
+  damagePerTick: number; // 1回あたりのダメージ
+  tickInterval: number; // ダメージを与える間隔 (秒)
+  range: number; // 効果範囲 (半径ピクセル)
+  sprite: string; // 表示するアニメーション/画像 (CSSクラス名)
+}
+
 export interface Spell {
   id: string;
   name: string;
@@ -14,6 +23,7 @@ export interface Spell {
   damageRangeOnHit: number; // 着弾時のダメージ範囲 (半径ピクセル)
   projectileSprite: string; // 飛翔中のアニメーション/画像 (CSSクラス名)
   impactEffect: string;   // 着弾時のエフェクト名 (CSSクラス名)
+  groundEffect?: GroundEffect; // 地面効果 (オプション)
 }
 
 export const spells: Spell[] = [
@@ -46,6 +56,14 @@ export const spells: Spell[] = [
     damageRangeOnHit: 50, // 仮設定
     projectileSprite: 'fireball-projectile', // 仮設定
     impactEffect: 'fireball-impact', // 仮設定
+    groundEffect: { // この部分を追加
+      id: 'ground-flame',
+      duration: 10, // 10秒間残るように変更
+      damagePerTick: 5, // 0.5秒ごとに5ダメージ
+      tickInterval: 0.5,
+      range: 60, // 半径60ピクセルの範囲
+      sprite: 'ground-flame-effect',
+    }
   },
   {
     id: 'icicle_lance',

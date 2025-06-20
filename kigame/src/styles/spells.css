@@ -102,3 +102,16 @@
   50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.5; }
   100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }
+
+/* --- Ground Flame Effect (地面の炎効果) --- */
+.ground-flame-effect {
+  background-color: rgba(255, 100, 0, 0.5);
+  border-radius: 50%;
+  animation: ground-flame-pulse 1s infinite;
+}
+
+@keyframes ground-flame-pulse {
+  0% { transform: scale(0.9); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(0.9); opacity: 0.5; }
+}

@@ -25,7 +25,7 @@ const Player: React.FC<PlayerProps> = ({ x, y, direction }) => {
         height: '20px',
         backgroundColor: 'blue',
         borderRadius: '50%',
-        zIndex: 160, // HUD(150)より大きい値を設定
+        zIndex: 10, // SpellBar(100)より低い値を設定
       }}
     >
       {/* 向きを示すインジケーター */}
