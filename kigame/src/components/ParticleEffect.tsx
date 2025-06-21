@@ -25,44 +25,40 @@ const ParticleEffect = ({ id, x, y, className, particleCount, duration, range, o
       const particleX = Math.cos(angle) * radius;
       const particleY = Math.sin(angle) * radius;
 
-      let moveAnimationName;
-      if (className === 'physical-particle') {
-        moveAnimationName = 'particle-move-shockwave';
-      } else if (className === 'fire-particle') {
-        moveAnimationName = 'particle-move-up';
-      } else if (className === 'ice-particle') {
-        moveAnimationName = 'particle-move-shatter';
-      } else if (className === 'slashing-particle') {
-        // 切断属性の場合は特殊な動きはCSSで直接制御するため、ここでは汎用的な動きは指定しない
-        moveAnimationName = ''; // または 'none'
-      } else {
-        moveAnimationName = `particle-move-${Math.ceil(Math.random() * 5)}`;
-      }
-
-      // CSSカスタムプロパティでランダムな方向を設定
       const randomX = (Math.random() - 0.5) * 2; // -1 to 1
       const randomY = (Math.random() - 0.5) * 2; // -1 to 1
 
-      const style: React.CSSProperties = {
+      const style: React.CSSProperties & { [key: string]: any } = { // 型アサーションを追加
         left: `${particleX}px`,
         top: `${particleY}px`,
         animationDuration: `${duration}ms`,
-        animationDelay: `${Math.random() * 50}ms`, // 遅延を少し短くして一斉に広がる感を出す
         animationTimingFunction: 'ease-out',
         animationFillMode: 'forwards',
       };
 
-      // 切断属性の場合は個別のtransformを適用
       if (className === 'slashing-particle') {
-        const angle = (i / particleCount) * 180 - 90; // -90度から+90度の範囲
-        style.transform = `rotate(${angle}deg)`;
+        style.animationName = 'slashing-particle-fade'; // CSSで定義されている名前
+        const slashAngle = (i / particleCount) * 180 - 90; // -90度から+90度の範囲
+        style.transform = `rotate(${slashAngle}deg)`;
         style.animationDelay = `${i * 10}ms`; // 少しずつ表示をずらす
-        style.animationName = `${className}-fade`; // 切断属性はfade-in-outではなくfade
       } else {
+        let moveAnimationName;
+        if (className === 'physical-particle') {
+          moveAnimationName = 'particle-move-shockwave';
+        } else if (className === 'fire-particle') {
+          moveAnimationName = 'particle-move-up';
+        } else if (className === 'ice-particle') {
+          moveAnimationName = 'particle-move-shatter';
+        } else {
+          moveAnimationName = `particle-move-${Math.ceil(Math.random() * 5)}`;
+        }
         style.animationName = `${className}-fade-in-out, ${moveAnimationName}`;
+        style.animationDelay = `${Math.random() * 50}ms`; // 遅延を少し短くして一斉に広がる感を出す
+        style['--random-x'] = randomX; // CSS変数として設定
+        style['--random-y'] = randomY;
       }
 
-      return <div key={i} className={`${className} particle`} style={{ ...style, '--random-x': randomX, '--random-y': randomY } as React.CSSProperties} />;
+      return <div key={i} className={`${className} particle`} style={style} />;
     });
     setParticles(newParticles);
 

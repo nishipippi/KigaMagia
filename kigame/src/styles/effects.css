@@ -81,7 +81,7 @@
 }
 
 /* フェードアウトとスケール変化 */
-@keyframes fire-particle-fade-out {
+@keyframes fire-particle-fade-in-out { /* 名前を統一 */
   0% { opacity: 1; transform: scale(0.8); }
   50% { opacity: 0.8; transform: scale(1.2); }
   100% { opacity: 0; transform: scale(0.5); }
@@ -113,7 +113,7 @@
   animation-duration: 700ms;
 }
 
-@keyframes ice-particle-fade-out {
+@keyframes ice-particle-fade-in-out { /* 名前を統一 */
   0% { opacity: 1; transform: scale(1) rotate(0deg); }
   100% { opacity: 0; transform: scale(0.4) rotate(calc(var(--random-x, 1) * 180deg)); } /* 回転しながら消える */
 }
@@ -150,7 +150,7 @@
 }
 
 /* フェードアウト用アニメーション */
-@keyframes physical-particle-fade-out {
+@keyframes physical-particle-fade-in-out { /* 名前を統一 */
   0% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.3); }
 }
@@ -189,7 +189,7 @@
   animation-fill-mode: forwards;
 }
 
-@keyframes slashing-particle-fade {
+@keyframes slashing-particle-fade-in-out { /* 名前を統一 */
   0% { opacity: 0; transform: scaleX(0); }
   50% { opacity: 1; transform: scaleX(1); }
   100% { opacity: 0; transform: scaleX(0); }
