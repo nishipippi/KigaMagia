@@ -1,0 +1,196 @@
+.particle-effect-container {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  pointer-events: none; /* クリックイベントを透過させる */
+  z-index: 10; /* 他の要素の上に表示 */
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%); /* 中心を基準に配置 */
+}
+
+/* Lightning Particles */
+.lightning-particle {
+  width: 4px;
+  height: 4px;
+  background-color: #aaddff; /* 青白い色 */
+  box-shadow: 0 0 8px #aaddff, 0 0 12px #ffffff;
+}
+
+/* Fade In/Out Animations for each attribute */
+@keyframes lightning-particle-fade-in-out {
+  0% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.5); }
+}
+
+/* Generic Particle Movement Animations (5 patterns) */
+@keyframes particle-move-1 {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * 30px), calc(var(--random-y, 1) * -50px)); }
+}
+@keyframes particle-move-2 {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * -40px), calc(var(--random-y, 1) * 20px)); }
+}
+@keyframes particle-move-3 {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * 50px), calc(var(--random-y, 1) * 10px)); }
+}
+@keyframes particle-move-4 {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * -20px), calc(var(--random-y, 1) * -30px)); }
+}
+@keyframes particle-move-5 {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * 10px), calc(var(--random-y, 1) * 40px)); }
+}
+
+/* Fire Particles */
+.fire-particle {
+  width: 8px;
+  height: 8px;
+  /* 複数の色を使い、不規則な形にする */
+  background-color: #ff4500; /* オレンジレッド */
+  border-radius: 50% 50% 30% 70% / 50% 40% 60% 50%;
+  box-shadow: 0 0 10px #ff4500, 0 0 15px #ffa500, 0 0 20px #ff6347;
+  opacity: 0;
+  /* 炎用のアニメーションを指定 */
+  animation-name: fire-particle-fade-out, particle-move-up;
+  animation-duration: 600ms; /* 少し長めに */
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+/* 色と形のバリエーション */
+.fire-particle:nth-child(2n) {
+  background-color: #ff6347; /* トマト */
+  width: 6px;
+  height: 10px;
+  animation-duration: 500ms;
+}
+.fire-particle:nth-child(3n) {
+  background-color: #ffd700; /* ゴールド */
+  width: 5px;
+  height: 5px;
+  animation-duration: 700ms;
+}
+
+/* フェードアウトとスケール変化 */
+@keyframes fire-particle-fade-out {
+  0% { opacity: 1; transform: scale(0.8); }
+  50% { opacity: 0.8; transform: scale(1.2); }
+  100% { opacity: 0; transform: scale(0.5); }
+}
+
+/* 上昇しながら横に揺れる動き */
+@keyframes particle-move-up {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * 20px), -60px); } /* 上方向に大きく動かす */
+}
+
+/* Ice Particles */
+.ice-particle {
+  width: 7px;
+  height: 7px;
+  background: linear-gradient(45deg, #e0ffff, #afeeee); /* ライトシアンからペールターコイズへ */
+  box-shadow: 0 0 8px #e0ffff, 0 0 12px #ffffff;
+  opacity: 0;
+  /* clip-pathで鋭い形を作る */
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); /* ひし形 */
+  animation-name: ice-particle-fade-out, particle-move-shatter;
+  animation-duration: 800ms; /* 少し長め */
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation-fill-mode: forwards;
+}
+
+.ice-particle:nth-child(2n) {
+  clip-path: polygon(0 0, 100% 0, 100% 75%, 0 75%); /* 不規則な四角形 */
+  animation-duration: 700ms;
+}
+
+@keyframes ice-particle-fade-out {
+  0% { opacity: 1; transform: scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: scale(0.4) rotate(calc(var(--random-x, 1) * 180deg)); } /* 回転しながら消える */
+}
+
+/* 砕け散るような動き */
+@keyframes particle-move-shatter {
+  from { transform: translate(0, 0); }
+  to { transform: translate(calc(var(--random-x, 1) * 50px), calc(var(--random-y, 1) * 50px)); }
+}
+
+/* Physical Particles */
+.physical-particle {
+  width: 6px; /* 少し大きく */
+  height: 6px;
+  background-color: #8B4513; /* サドルブラウン (土の色) */
+  /* border-radiusを不規則に見せる */
+  border-radius: 40% 60% 50% 50% / 50% 50% 60% 50%;
+  opacity: 0;
+  /* アニメーション名を変更 */
+  animation-name: physical-particle-fade-out, particle-move-shockwave;
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.1, 0.9, 0.2, 1); /* 勢いのある動き */
+  animation-fill-mode: forwards;
+}
+
+/* 色のバリエーションを追加 */
+.physical-particle:nth-child(2n) {
+  background-color: #A0522D; /* シエンナ */
+}
+.physical-particle:nth-child(3n) {
+  background-color: #696969; /* ディムグレイ */
+  width: 4px;
+  height: 4px;
+}
+
+/* フェードアウト用アニメーション */
+@keyframes physical-particle-fade-out {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.3); }
+}
+
+/* 衝撃波のような動きのアニメーション */
+@keyframes particle-move-shockwave {
+  from { transform: translate(0, 0); }
+  /* 各パーティクルが外側に速く広がる */
+  to { transform: translate(calc(var(--random-x, 1) * 60px), calc(var(--random-y, 1) * 60px)); }
+}
+
+/* Explosion Particles */
+.explosion-particle {
+  width: 8px;
+  height: 8px;
+  background-color: #ffd700; /* ゴールド */
+  box-shadow: 0 0 15px #ffd700, 0 0 20px #ff8c00;
+}
+
+@keyframes explosion-particle-fade-in-out {
+  0% { opacity: 0; transform: scale(0.1); }
+  20% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
+/* Slashing Particles */
+.slashing-particle {
+  width: 80px; /* 長く */
+  height: 2px; /* 細く */
+  background: linear-gradient(90deg, transparent, #ffffff, transparent);
+  border-radius: 0; /* 四角く */
+  opacity: 0;
+  animation-name: slashing-particle-fade;
+  animation-duration: 250ms; /* 素早く */
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes slashing-particle-fade {
+  0% { opacity: 0; transform: scaleX(0); }
+  50% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(0); }
+}

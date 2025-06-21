@@ -15,6 +15,8 @@ import ChainLightningEffect from '../components/ChainLightningEffect'; // ChainL
 import GroundFlameEffect from '../components/GroundFlameEffect'; // GroundFlameEffectをインポート
 import SpellBar from '../components/SpellBar'; // SpellBarをインポート
 import { GroundEffect } from '../data/spells'; // GroundEffectインターフェースをインポート
+import ParticleEffect from '../components/ParticleEffect'; // ParticleEffectをインポート
+import { particleEffects as allParticleEffects } from '../data/effects'; // particleEffectsデータをインポート
 
 interface SpellData {
   id: number;
@@ -51,6 +53,7 @@ interface GroundEffectData {
   groundEffect: GroundEffect;
   startTime: number; // 地面効果が生成された時刻を追加
   lastDamageTick: number; // 最後にダメージを与えた時刻
+  // isSelfDamage は GroundEffect インターフェースに含まれるため、ここでは不要
 }
 
 type GamePhase = 'title' | 'playing' | 'levelUp' | 'gameOver';
@@ -87,6 +90,10 @@ export default function Home() {
   const chainLightningEffectIdCounterRef = useRef(0); // チェインライトニングエフェクトのIDカウンター
   const [groundEffects, setGroundEffects] = useState<GroundEffectData[]>([]); // 地面効果の管理
   const groundEffectIdCounterRef = useRef(0); // 地面効果のIDカウンター
+  const [activeParticleEffects, setActiveParticleEffects] = useState<
+    { id: number; x: number; y: number; className: string; particleCount: number; duration: number; startTime: number; range: number; }[]
+  >([]); // アクティブなパーティクルエフェクト
+  const particleEffectIdCounterRef = useRef(0); // パーティクルエフェクトのIDカウンター
   const [playerLastDamagedTime, setPlayerLastDamagedTime] = useState(0); // プレイヤーが最後にダメージを受けた時刻
   const [gamePhase, setGamePhase] = useState<GamePhase>('title'); // 初期状態を'title'に変更
   const [survivalTime, setSurvivalTime] = useState(0); // 生存時間
@@ -277,6 +284,7 @@ export default function Home() {
         let gamePhaseChanged = false;
         let newChainLightningEffects: typeof chainLightningEffects = [];
         let nextGroundEffects = groundEffects; // 地面効果のstateをコピー
+        const newParticleEffects: typeof activeParticleEffects = []; // 新しいパーティクルエフェクトの配列
         const now = Date.now();
         const IMPACT_EFFECT_DURATION = 500; // 着弾エフェクトの表示時間 (ms)
 
@@ -325,6 +333,25 @@ export default function Home() {
             if (distance < collisionRadius) {
               // 敵にダメージを与える処理
               enemy.hp -= spellInfo.baseDamage; // 例: ダメージ適用
+
+              // 敵ヒット時に範囲ダメージパーティクルを生成
+              if (spellInfo.damageRangeOnHit > 0) {
+                const particleEffectDef = allParticleEffects.find(
+                  (effect) => effect.attribute === spellInfo.attribute
+                );
+                if (particleEffectDef) {
+                  newParticleEffects.push({
+                    id: particleEffectIdCounterRef.current++,
+                    x: enemy.x, // 着弾点ではなく、敵の位置を基準にする
+                    y: enemy.y,
+                    className: particleEffectDef.className,
+                    particleCount: particleEffectDef.particleCount,
+                    duration: particleEffectDef.duration,
+                    startTime: now,
+                    range: spellInfo.damageRangeOnHit,
+                  });
+                }
+              }
 
               // 敵に行動不能効果を適用
               if (spellInfo.stunDurationOnHit) {
@@ -408,7 +435,7 @@ export default function Home() {
 
             if (spellShouldImpact) {
             // --- ここから追加 ---
-            // 着弾時の範囲ダメージ
+            // 着弾時の範囲ダメージ (これは残す)
             if (spellInfo.damageRangeOnHit > 0) {
               nextEnemies.forEach(enemy => {
                 // 既にこのスペルで直接ダメージを受けた敵は対象外
@@ -441,7 +468,6 @@ export default function Home() {
                     }
                 }
             }
-            // --- ここまで追加 ---
 
             currentSpell.status = 'impact';
             currentSpell.dx = 0; // Stop movement
@@ -456,7 +482,7 @@ export default function Home() {
                   id: groundEffectIdCounterRef.current++,
                   x: currentSpell.x,
                   y: currentSpell.y,
-                  groundEffect: spellInfo.groundEffect,
+                  groundEffect: spellInfo.groundEffect, // groundEffectオブジェクトをそのまま渡す
                   startTime: now, // 生成時刻を記録
                   lastDamageTick: now, // 初期ダメージ時刻を設定
                 },
@@ -490,7 +516,8 @@ export default function Home() {
 
         // プレイヤーへのダメージ処理
         const distanceToPlayer = Math.sqrt(Math.pow(playerXRef.current - effect.x, 2) + Math.pow(playerYRef.current - effect.y, 2));
-        if (distanceToPlayer < effect.groundEffect.range && now - nextPlayerLastDamagedTime > PLAYER_DAMAGE_COOLDOWN) {
+        // effect.groundEffect.isSelfDamage が true の場合のみダメージを与える
+        if (effect.groundEffect.isSelfDamage && distanceToPlayer < effect.groundEffect.range && now - nextPlayerLastDamagedTime > PLAYER_DAMAGE_COOLDOWN) {
           nextPlayerHp -= effect.groundEffect.damagePerTick;
           nextPlayerLastDamagedTime = now;
           if (nextPlayerHp <= 0) {
@@ -599,6 +626,12 @@ export default function Home() {
       const effectDuration = 200; // 稲妻アニメーションの表示時間 (ms)
       newChainLightningEffects = [...chainLightningEffects.filter(effect => now - effect.startTime < effectDuration), ...newChainLightningEffects];
 
+      // 古いパーティクルエフェクトを削除
+      const nextActiveParticleEffects = [
+        ...activeParticleEffects.filter(effect => now < effect.startTime + effect.duration), // 正しい寿命判定
+        ...newParticleEffects
+      ];
+
 
       // 3. 状態のバッチ更新
       if (gamePhaseChanged) return; // ゲームオーバーになったら更新を停止
@@ -611,11 +644,12 @@ export default function Home() {
       setPlayerStunnedUntil(nextPlayerStunnedUntil); // プレイヤーの行動不能解除時刻を更新
       setChainLightningEffects(newChainLightningEffects); // チェインライトニングエフェクトを更新
       setGroundEffects(nextGroundEffects); // 地面効果を更新
+      setActiveParticleEffects(nextActiveParticleEffects); // パーティクルエフェクトを更新
 
     }, 50);
 
     return () => clearInterval(gameLoop);
-  }, [gamePhase, playerHp, currentExp, spells, enemies, experienceOrbs, canvasSize.height, canvasSize.width, chainLightningEffects, groundEffects, playerLastDamagedTime, playerStunnedUntil]); // playerX, playerY を依存配列から削除
+  }, [gamePhase, playerHp, currentExp, spells, enemies, experienceOrbs, canvasSize.height, canvasSize.width, chainLightningEffects, groundEffects, playerLastDamagedTime, playerStunnedUntil, activeParticleEffects]); // playerX, playerY を依存配列から削除
 
   // プレイヤーの向きを計算するロジック
   useEffect(() => {
@@ -815,6 +849,23 @@ export default function Home() {
                   groundEffect={effect.groundEffect}
                   onComplete={(idToRemove) => {
                     setGroundEffects((prevEffects) =>
+                      prevEffects.filter((e) => e.id !== idToRemove)
+                    );
+                  }}
+                />
+              ))}
+              {activeParticleEffects.map((effect) => (
+                <ParticleEffect
+                  key={effect.id}
+                  id={effect.id}
+                  x={effect.x}
+                  y={effect.y}
+                  className={effect.className}
+                  particleCount={effect.particleCount}
+                  duration={effect.duration}
+                  range={effect.range} // range をコンポーネントに渡す
+                  onComplete={(idToRemove) => {
+                    setActiveParticleEffects((prevEffects) =>
                       prevEffects.filter((e) => e.id !== idToRemove)
                     );
                   }}

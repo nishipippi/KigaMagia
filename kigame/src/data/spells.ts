@@ -7,6 +7,7 @@ export interface GroundEffect {
   tickInterval: number; // ダメージを与える間隔 (秒)
   range: number; // 効果範囲 (半径ピクセル)
   sprite: string; // 表示するアニメーション/画像 (CSSクラス名)
+  isSelfDamage: boolean; // 自傷ダメージがあるか (地面効果用)
 }
 
 export interface Spell {
@@ -40,7 +41,7 @@ export const spells: Spell[] = [
     isSelfDamage: false,
     lifetime: 2, // 仮設定
     speed: 30, // 仮設定
-    damageRangeOnHit: 0, // 仮設定
+    damageRangeOnHit: 5, // 仮設定
     projectileSprite: 'magic-fist-projectile', // 仮設定
     impactEffect: 'magic-fist-impact', // 仮設定
   },
@@ -52,19 +53,20 @@ export const spells: Spell[] = [
     baseDamage: 30, // spell.mdの「ダメージ+20%」から逆算して仮に設定
     cooldown: 1.5, // 仮設定
     manaCost: 15, // 仮設定
-    isSelfDamage: false,
+    isSelfDamage: true,
     lifetime: 3, // 仮設定
     speed: 20, // 仮設定
     damageRangeOnHit: 100, // 仮設定
     projectileSprite: 'fireball-projectile', // 仮設定
     impactEffect: 'fireball-impact', // 仮設定
-    groundEffect: { // この部分を追加
+    groundEffect: {
       id: 'ground-flame',
       duration: 10, // 10秒間残るように変更
       damagePerTick: 5, // 0.5秒ごとに5ダメージ
       tickInterval: 0.5,
       range: 60, // 半径60ピクセルの範囲
       sprite: 'ground-flame-effect',
+      isSelfDamage: true, // 地面効果の自傷もなしに設定
     }
   },
   {
@@ -78,7 +80,7 @@ export const spells: Spell[] = [
     isSelfDamage: true, // 自傷リスクを追加
     lifetime: 4, // 仮設定
     speed: 40, // 仮設定
-    damageRangeOnHit: 0, // 仮設定
+    damageRangeOnHit: 5, // 仮設定
     projectileSprite: 'icicle-lance-projectile', // 仮設定
     impactEffect: 'icicle-lance-impact', // 仮設定
     penetrationCount: 3, // 3回まで貫通する
@@ -95,7 +97,7 @@ export const spells: Spell[] = [
     isSelfDamage: true,
     lifetime: 1, // 仮設定 (瞬時)
     speed: 10, // 仮設定 (瞬時)
-    damageRangeOnHit: 100, // 仮設定 (連鎖なので直接的な着弾範囲はなし)
+    damageRangeOnHit: 10, // 仮設定 (連鎖なので直接的な着弾範囲はなし)
     projectileSprite: 'chain-lightning-projectile', // 仮設定
     impactEffect: 'chain-lightning-impact', // 仮設定
     stunDurationOnHit: 2, // 2秒間の行動不能効果を追加
